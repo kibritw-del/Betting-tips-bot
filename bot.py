@@ -18,7 +18,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Global Betting Tips Bot is Live on Free Tier!"
+    return "Global Betting Tips Bot is Live!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -29,37 +29,37 @@ dp = Dispatcher()
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     'Accept-Language': 'en-US,en;q=0.9',
-    'Cache-Control': 'no-cache'
 }
 
-# 3. Forebet Scraper
+# 3. Fixed Forebet Scraper
 def fetch_forebet():
     try:
         url = "https://www.forebet.com/en/football-tips-and-predictions-for-today"
-        res = requests.get(url, headers=HEADERS, timeout=20)
+        res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         
         tips = "📈 **Forebet: የዛሬ ትንበያዎች**\n\n"
-        rows = soup.select('.predict, .tr_0, .tr_1, .schema_row, div[class*="tr_"]')
+        rows = soup.select('.tr_0, .tr_1, .schema_row')
         count = 0
         
         for row in rows:
             if count >= 15:
                 break
             try:
-                home = row.select_one('.homeTeam, .home-team, span[itemprop="homeTeam"]')
-                away = row.select_one('.awayTeam, .away-team, span[itemprop="awayTeam"]')
-                pred = row.select_one('.pred_txt, .forebet_pred, .predict-score, .forebet_prediction')
+                home_elem = row.select_one('.homeTeam span, .homeTeam')
+                away_elem = row.select_one('.awayTeam span, .awayTeam')
+                pred_elem = row.select_one('.forebet_pred span, .predict-score, .forebet_pred')
                 
-                if home and away:
-                    h_text = home.text.strip()
-                    a_text = away.text.strip()
-                    p_text = pred.text.strip() if pred else "N/A"
-                    tips += f"• **{h_text}** vs **{a_text}** ➡️ `{p_text}`\n"
-                    count += 1
-            except:
+                if home_elem and away_elem:
+                    home = home_elem.text.strip()
+                    away = away_elem.text.strip()
+                    pred = pred_elem.text.strip() if pred_elem else "1X2"
+                    
+                    if home and away:
+                        tips += f"• **{home}** vs **{away}** ➡️ `{pred}`\n"
+                        count += 1
+            except Exception:
                 continue
                 
         return tips if count > 0 else "Forebet: ለዛሬ አዲስ መረጃ ማግኘት አልተቻለም።"
@@ -67,32 +67,34 @@ def fetch_forebet():
         logging.error(f"Forebet error: {e}")
         return "⚠️ Forebet መረጃ ማምጣት አልተቻለም።"
 
-# 4. Predicd Scraper
+# 4. Fixed Predicd Scraper
 def fetch_predicd():
     try:
         url = "https://www.predicd.com/en/football/"
-        res = requests.get(url, headers=HEADERS, timeout=20)
+        res = requests.get(url, headers=HEADERS, timeout=15)
         soup = BeautifulSoup(res.text, 'html.parser')
         
         tips = "🎯 **Predicd: የዛሬ ትንበያዎች**\n\n"
-        matches = soup.select('.match-row, .match-prediction-wrapper, .match-item, tr, div[class*="match"]')
+        matches = soup.select('.match-item, .match-row, tr[class*="match"]')
         count = 0
         
         for match in matches:
             if count >= 15:
                 break
             try:
-                home = match.select_one('.home-team-name, .home-team, .team-home, [class*="home"]')
-                away = match.select_one('.away-team-name, .away-team, .team-away, [class*="away"]')
-                pred = match.select_one('.prediction-score, .prediction-box, .prediction, [class*="pred"]')
+                home_elem = match.select_one('.team-home, .home-team-name, td.home')
+                away_elem = match.select_one('.team-away, .away-team-name, td.away')
+                pred_elem = match.select_one('.prediction, .pred-val, td.prediction-box')
                 
-                if home and away:
-                    h_text = home.text.strip()
-                    a_text = away.text.strip()
-                    p_text = pred.text.strip() if pred else "N/A"
-                    tips += f"• **{h_text}** vs **{a_text}** ➡️ `{p_text}`\n"
-                    count += 1
-            except:
+                if home_elem and away_elem:
+                    home = home_elem.text.strip()
+                    away = away_elem.text.strip()
+                    pred = pred_elem.text.strip() if pred_elem else "N/A"
+                    
+                    if home and away and not home.endswith('%'):
+                        tips += f"• **{home}** vs **{away}** ➡️ `{pred}`\n"
+                        count += 1
+            except Exception:
                 continue
                 
         return tips if count > 0 else "Predicd: ለዛሬ መረጃ አልተገኘም።"
@@ -102,11 +104,10 @@ def fetch_predicd():
 
 # 5. Handlers & Keyboard
 def main_keyboard():
-    kb = ReplyKeyboardMarkup(
+    return ReplyKeyboardMarkup(
         keyboard=[[KeyboardButton(text="⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")]],
         resize_keyboard=True
     )
-    return kb
 
 @dp.message(Command("start"))
 async def start(message: types.Message):
