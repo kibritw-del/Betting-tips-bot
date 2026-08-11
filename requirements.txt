@@ -1,4 +1,4 @@
-aiogram
+aiogram>=3.0.0
 flask
 requests
 beautifulsoup4
