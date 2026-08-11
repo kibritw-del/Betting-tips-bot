@@ -1,30 +1,31 @@
 import os
 import logging
+import asyncio
 import requests
 from bs4 import BeautifulSoup
-from aiogram import Bot, Dispatcher, types
-from aiogram.utils import executor
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from flask import Flask
 from threading import Thread
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 
-# 1. Logging Setup
+# 1. Logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-# 2. Setup & Constants
+# 2. Setup
 API_TOKEN = "8409943297:AAEGWcOV1vQFKJMxIM0irVjoXHpY5RibPHk"
 app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Global Betting Tips Bot is Fully Operational!"
+    return "Global Betting Tips Bot is Live on Free Tier!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
 bot = Bot(token=API_TOKEN)
-dp = Dispatcher(bot)
+dp = Dispatcher()
 
 HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
@@ -101,16 +102,18 @@ def fetch_predicd():
 
 # 5. Handlers & Keyboard
 def main_keyboard():
-    kb = ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.add(KeyboardButton("⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ"))
+    kb = ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text="⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")]],
+        resize_keyboard=True
+    )
     return kb
 
-@dp.message_handler(commands=['start'])
+@dp.message(Command("start"))
 async def start(message: types.Message):
     msg = f"ሰላም {message.from_user.first_name}!\n\nቦቱ ዝግጁ ነው። የዛሬዎቹን ትንበያዎች ለማግኘት ከታች ያለውን በተን ይጫኑ።"
     await message.reply(msg, reply_markup=main_keyboard())
 
-@dp.message_handler(lambda m: m.text == "⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")
+@dp.message(F.text == "⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")
 async def send_tips(message: types.Message):
     await message.answer("🔄 ትኩስ መረጃዎችን ከ Forebet እና Predicd እያመጣሁ ነው... ጥቂት ይጠብቁ።")
     
@@ -121,6 +124,9 @@ async def send_tips(message: types.Message):
     await message.answer(predicd_res, parse_mode="Markdown", reply_markup=main_keyboard())
 
 # 6. Run Server
-if __name__ == '__main__':
+async def main():
     Thread(target=run_flask, daemon=True).start()
-    executor.start_polling(dp, skip_updates=True)
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
