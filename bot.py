@@ -2,6 +2,7 @@ import os
 import logging
 import asyncio
 import requests
+from bs4 import BeautifulSoup
 from flask import Flask
 from threading import Thread
 from aiogram import Bot, Dispatcher, types, F
@@ -17,7 +18,7 @@ app = Flask(__name__)
 
 @app.route('/')
 def home():
-    return "Real Football Predictions Bot is Live!"
+    return "Today Matches Prediction Bot is Live!"
 
 def run_flask():
     port = int(os.environ.get("PORT", 10000))
@@ -30,7 +31,6 @@ HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36'
 }
 
-# 3. Dynamic Prediction Options
 PREDICTION_OPTIONS = [
     "Home Win (1)",
     "Away Win (2)",
@@ -39,62 +39,68 @@ PREDICTION_OPTIONS = [
     "Under 2.5 Goals",
     "Double Chance (1X)",
     "Double Chance (X2)",
-    "Over 1.5 Goals",
-    "Home or Draw (1X)"
+    "Over 1.5 Goals"
 ]
 
-def fetch_live_predictions():
-    matches_found = []
-    
-    # Primary Source: ESPN Football Scoreboard
+def fetch_today_matches():
     try:
-        url = "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard"
+        # Scrape ESPN directly for today's real fixtures
+        url = "https://www.espn.com/soccer/fixtures"
         res = requests.get(url, headers=HEADERS, timeout=12)
-        if res.status_code == 200:
-            events = res.json().get('events', [])
-            for ev in events:
-                comp_name = ev.get('league', {}).get('name', 'International Football')
-                competitors = ev.get('competitions', [{}])[0].get('competitors', [])
-                if len(competitors) >= 2:
-                    home = competitors[0].get('team', {}).get('displayName')
-                    away = competitors[1].get('team', {}).get('displayName')
-                    if home and away:
-                        matches_found.append((comp_name, home, away))
-    except Exception as e:
-        logging.error(f"ESPN Fetch Error: {e}")
-
-    # Fallback Source: OpenLigaDB API
-    if len(matches_found) < 3:
-        try:
-            url_backup = "https://api.openligadb.de/getmatchdata/bl1"
-            res_b = requests.get(url_backup, timeout=12)
-            if res_b.status_code == 200:
-                data = res_b.json()
-                for m in data:
-                    home = m.get('team1', {}).get('teamName')
-                    away = m.get('team2', {}).get('teamName')
-                    if home and away:
-                        matches_found.append(("Bundesliga / European Football", home, away))
-        except Exception as e:
-            logging.error(f"Backup API Fetch Error: {e}")
-
-    if not matches_found:
-        return "⚠️ ለዛሬ የተመዘገቡ ጨዋታዎችን ማግኘት አልተቻለም። እባክዎ ጥቂት ቆይተው ድጋሚ ይሞክሩ።"
-
-    tips = "⚽ **የዛሬ እውነተኛ ጨዋታዎች እና ትንበያዎች**\n\n"
-    count = 0
-
-    for comp, home, away in matches_found[:12]:
-        # Generate predictable unique prediction per match
-        pred_idx = (hash(home + away) & 0x7FFFFFFF) % len(PREDICTION_OPTIONS)
-        pred = PREDICTION_OPTIONS[pred_idx]
+        soup = BeautifulSoup(res.text, 'html.parser')
         
-        tips += f"🏆 **{comp}**\n"
-        tips += f"• **{home}** vs **{away}**\n"
-        tips += f"  🎯 ትንበያ: `{pred}`\n\n"
-        count += 1
+        matches_found = []
+        
+        # Parse table contents
+        tables = soup.select('.Table')
+        for table in tables:
+            caption = table.select_one('.Table__Title')
+            comp_name = caption.text.strip() if caption else "Today Football Match"
+            
+            rows = table.select('tbody tr')
+            for row in rows:
+                teams = row.select('.Table__TD .AnchorLink span')
+                if len(teams) >= 2:
+                    home = teams[0].text.strip()
+                    away = teams[1].text.strip()
+                    if home and away and home != away:
+                        matches_found.append((comp_name, home, away))
+        
+        # Fallback to ESPN API if web structure changes
+        if not matches_found:
+            api_url = "https://site.api.espn.com/apis/site/v2/sports/soccer/all/scoreboard"
+            api_res = requests.get(api_url, headers=HEADERS, timeout=10)
+            if api_res.status_code == 200:
+                events = api_res.json().get('events', [])
+                for ev in events:
+                    comp = ev.get('league', {}).get('name', 'Soccer')
+                    comps = ev.get('competitions', [{}])[0].get('competitors', [])
+                    if len(comps) >= 2:
+                        h = comps[0].get('team', {}).get('displayName')
+                        a = comps[1].get('team', {}).get('displayName')
+                        if h and a:
+                            matches_found.append((comp, h, a))
 
-    return tips
+        if not matches_found:
+            return "⚽ ለዛሬ የተመዘገቡ ዋና ዋና የዓለም አቀፍ ጨዋታዎች የሉም ወይም ጨዋታዎቹ አልቀዋል።"
+
+        tips = "⚽ **የዛሬ እውነተኛ ጨዋታዎች እና ትንበያዎች**\n\n"
+        count = 0
+
+        for comp, home, away in matches_found[:12]:
+            pred_idx = (hash(home + away) & 0x7FFFFFFF) % len(PREDICTION_OPTIONS)
+            pred = PREDICTION_OPTIONS[pred_idx]
+            
+            tips += f"🏆 **{comp}**\n"
+            tips += f"• **{home}** vs **{away}**\n"
+            tips += f"  🎯 ትንበያ: `{pred}`\n\n"
+            count += 1
+
+        return tips
+
+    except Exception as e:
+        logging.error(f"Fetch Error: {e}")
+        return "⚠️ መረጃዎችን በማምጣት ላይ ስህተት ተፈጥሯል።"
 
 # 4. Keyboard & Handlers
 def main_keyboard():
@@ -110,8 +116,8 @@ async def start(message: types.Message):
 
 @dp.message(F.text == "⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")
 async def send_tips(message: types.Message):
-    await message.answer("🔄 የዛሬዎቹን እውነተኛ ጨዋታዎች እያመጣሁ ነው... ጥቂት ይጠብቁ።")
-    res_text = fetch_live_predictions()
+    await message.answer("🔄 የዛሬዎቹን እውነተኛ ጨዋታዎች ከ ESPN እያመጣሁ ነው... ጥቂት ይጠብቁ።")
+    res_text = fetch_today_matches()
     await message.answer(res_text, parse_mode="Markdown", reply_markup=main_keyboard())
 
 # 5. Main Execution
