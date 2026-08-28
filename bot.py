@@ -18,13 +18,14 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-API_TOKEN = os.environ.get("BOT_TOKEN")
+# የሰጠኸው የቦት ቶከን በቀጥታ ተካትቷል
+API_TOKEN = "8498983234:AAEjx-t9i9fdeJGS3Yyk97CiN5ReAQRGqw8"
 FOOTBALL_DATA_API_KEY = os.environ.get("FOOTBALL_DATA_API_KEY")
 
 if not API_TOKEN or not FOOTBALL_DATA_API_KEY:
     raise RuntimeError(
-        "Missing BOT_TOKEN or FOOTBALL_DATA_API_KEY environment variables. "
-        "Set them in your hosting dashboard before starting the bot."
+        "Missing FOOTBALL_DATA_API_KEY environment variable. "
+        "Set it in your hosting dashboard before starting the bot."
     )
 
 app = Flask(__name__)
@@ -246,14 +247,14 @@ async def start(message: types.Message):
         f"ሰላም {escape(message.from_user.first_name)}!\n\n"
         "ቦቱ ዝግጁ ነው። የዛሬዎቹን ጨዋታዎች ከስታትስቲክስ ሞዴል ትንበያ ጋር ለማግኘት ከታች ያለውን በተን ይጫኑ።"
     )
-    await message.reply(msg, reply_markup=main_keyboard())
+    await message.reply(msg, reply_markup=main_keyword())
 
 
 @dp.message(F.text == "⚽ የዛሬ ሙሉ ትንበያዎችን አቅርብ")
 async def send_tips(message: types.Message):
     await message.answer("🔄 የዛሬዎቹን ጨዋታዎች እና ስታትስቲክስ እያሰላሁ ነው...")
     res_text = fetch_today_real_matches()
-    await message.answer(res_text, parse_mode="HTML", reply_markup=main_keyboard())
+    await message.answer(res_text, parse_mode="HTML", reply_markup=main_keyword())
 
 
 async def main():
