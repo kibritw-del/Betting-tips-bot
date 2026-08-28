@@ -18,10 +18,6 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
-# SECURITY: tokens must come from environment variables, never hardcoded.
-# Set these in your hosting platform (Render/Railway/etc):
-#   BOT_TOKEN=...
-#   FOOTBALL_DATA_API_KEY=...
 API_TOKEN = os.environ.get("BOT_TOKEN")
 FOOTBALL_DATA_API_KEY = os.environ.get("FOOTBALL_DATA_API_KEY")
 
@@ -50,9 +46,8 @@ dp = Dispatcher()
 FOOTBALL_API_BASE = "https://api.football-data.org/v4"
 HEADERS = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
 
-# Cache standings per competition for the day (avoids hammering the 10 req/min free-tier limit)
-_standings_cache = {}  # competition_id -> {"data": {...}, "ts": epoch_seconds}
-CACHE_TTL_SECONDS = 6 * 60 * 60  # 6 hours
+_standings_cache = {}
+CACHE_TTL_SECONDS = 6 * 60 * 60
 
 
 # ============================================================
@@ -65,7 +60,6 @@ def poisson_pmf(k: int, lam: float) -> float:
 
 
 def compute_markets(lambda_home: float, lambda_away: float, max_goals: int = 6) -> dict:
-    """Build the full score matrix and sum probabilities into betting markets."""
     home_win = draw = away_win = over25 = btts_yes = 0.0
     for h in range(max_goals + 1):
         for a in range(max_goals + 1):
@@ -94,7 +88,6 @@ def compute_markets(lambda_home: float, lambda_away: float, max_goals: int = 6) 
 
 
 def get_competition_standings(competition_id: int):
-    """Fetch and cache league standings (team-level played/won/draw/lost/goals)."""
     cached = _standings_cache.get(competition_id)
     if cached and (time.time() - cached["ts"]) < CACHE_TTL_SECONDS:
         return cached["data"]
@@ -137,7 +130,6 @@ def get_competition_standings(competition_id: int):
 
 
 def predict_match(competition_id: int, home_id: int, away_id: int, min_games: int = 3):
-    """Return (markets_dict, top_market, top_prob) or None if not enough data."""
     standings = get_competition_standings(competition_id)
     if not standings:
         return None
@@ -156,7 +148,6 @@ def predict_match(competition_id: int, home_id: int, away_id: int, min_games: in
     away_attack = (away_stats["gf"] / away_stats["played"]) / league_avg
     away_defense = (away_stats["ga"] / away_stats["played"]) / league_avg
 
-    # Small home-advantage multiplier, standard in these models (~1.1-1.3)
     HOME_ADV = 1.15
 
     lambda_home = home_attack * away_defense * league_avg * HOME_ADV
@@ -192,7 +183,6 @@ def fetch_today_real_matches() -> str:
 
         body_parts = []
         count = 0
-        skipped_low_data = 0
 
         for match in matches:
             if count >= 12:
@@ -217,7 +207,6 @@ def fetch_today_real_matches() -> str:
             block += f"• <b>{escape(home_name)}</b> vs <b>{escape(away_name)}</b>\n"
 
             if result is None:
-                skipped_low_data += 1
                 block += "  ℹ️ በቂ የስታትስቲክስ መረጃ የለም (ወቅቱ ገና ጀምሯል ወይም ውድድሩ አይደገፍም)።\n\n"
             else:
                 markets, top_market, top_prob = result
